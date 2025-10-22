@@ -1,7 +1,7 @@
 # Quando accedo ad olimpo ma voglio aprire un nuovo tab e copio l'url, mi esce la pagina https://olimpo-stage.telsy.com/#/not_authorized.
 
-## Analisi del Problema
-### Il problema era causato dal fatto che i token di autenticazione erano memorizzati nel sessionStorage, che non è condiviso tra tab diversi del browser (a differenza del localStorage).
+#### Analisi del Problema
+###### Il problema era causato dal fatto che i token di autenticazione erano memorizzati nel sessionStorage, che non è condiviso tra tab diversi del browser (a differenza del localStorage).
 
 ---
 
@@ -206,4 +206,4 @@ ngAfterViewInit(): void {
 - Errore username undefined risolto
 - Token condivisi tra tab
 - Refresh automatico
-- Gestione errori completa
+- Gestione errori
