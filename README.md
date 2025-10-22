@@ -13,13 +13,17 @@ File: authentication.service.ts
 
 Cambiato da:
 
+```typescript
 sessionStorage.setItem(SessionStorage.TOKEN, tokenData.token.access_token);
 sessionStorage.setItem(SessionStorage.REFRESH_TOKEN, tokenData.token.refresh_token);
+```
 
 Cambiato a:
 
+```typescript
 localStorage.setItem(SessionStorage.TOKEN, tokenData.token.access_token);
 localStorage.setItem(SessionStorage.REFRESH_TOKEN, tokenData.token.refresh_token);
+```
 
 
 #### 1.2 AuthenticationService - Modifica dei metodi di pulizia storage
@@ -54,9 +58,10 @@ Aggiunto:
 File: auth.guard.ts
 
 Aggiunto:
-
+```typescript
 import { Observable, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
+```
 
 #### 2.2 Miglioramento del metodo canActivate()
 
@@ -122,13 +127,14 @@ File: project-button.component.ts
 Problema: Cannot read properties of undefined (reading 'username')
 
 Soluzione:
-
+```typescript
 // PRIMA (causava errore)
 return this.users.find((el) => el.user_id === user_id).username;
 
 // DOPO (gestione sicura)
 const user = this.users.find((el) => el.user_id === user_id);
 return user ? user.username : '';
+```
 
 #### 4.2 StatisticsService
 
@@ -177,6 +183,7 @@ Angular rilevava cambiamenti nelle espressioni dopo il change detection
 
 Codice aggiunto alle direttive:
 
+```typescript
 ngOnInit(): void {
     const token = localStorage.getItem(SessionStorage.TOKEN);
     this.hasToken = !!token;
@@ -188,6 +195,7 @@ ngAfterViewInit(): void {
         this.checkPermissions(); // o updateView()
     }, 0);
 }
+```
 
 ---
 
