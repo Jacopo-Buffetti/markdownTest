@@ -1,209 +1,182 @@
-# Quando accedo ad olimpo ma voglio aprire un nuovo tab e copio l'url, mi esce la pagina https://olimpo-stage.telsy.com/#/not_authorized.
+# PERSISTENZA LOGIN TRA TAB
 
-#### Analisi del Problema
-###### Il problema era causato dal fatto che i token di autenticazione erano memorizzati nel sessionStorage, che non è condiviso tra tab diversi del browser (a differenza del localStorage).
+### ANALISI INIZIALE DEL PROBLEMA
 
----
+###### Problema Principale:
 
-## 1: Migrazione del Sistema di Storage dei Token
+Quando un utente faceva login su Olimpo e poi copiava l'URL per aprirlo in un nuovo tab, veniva reindirizzato a /not_authorized invece di accedere alla pagina desiderata.
 
-#### 1.1 AuthenticationService - Modifica del metodo setStorage()
+###### Analisi:
 
-File: authentication.service.ts
+- __sessionStorage vs localStorage__: I token erano salvati in sessionStorage
+- __Isolamento dei tab__: sessionStorage è isolato per ogni tab del browser
+- __AuthGuard__: Verificava la presenza del token per autorizzare l'accesso
+- __Flusso di errore__: Nuovo tab → Nessun token → AuthGuard nega accesso → Redirect a not_authorized
 
-Cambiato da:
+### MODIFICA 1: SISTEMA DI STORAGE DEI TOKEN
+
+__File__: `authentication.service.ts`
+
+__METODO__ `setStorage()`
+
+###### Modifica Specifica:
 
 ```typescript
+// PRIMA:
 sessionStorage.setItem(SessionStorage.TOKEN, tokenData.token.access_token);
 sessionStorage.setItem(SessionStorage.REFRESH_TOKEN, tokenData.token.refresh_token);
-```
 
-Cambiato a:
-
-```typescript
+// DOPO:
 localStorage.setItem(SessionStorage.TOKEN, tokenData.token.access_token);
 localStorage.setItem(SessionStorage.REFRESH_TOKEN, tokenData.token.refresh_token);
 ```
 
+###### Motivazione Tecnica:
 
-#### 1.2 AuthenticationService - Modifica dei metodi di pulizia storage
+- __sessionStorage__: Dati isolati per ogni tab/finestra del browser
+- __localStorage__: Dati condivisi tra tutti i tab dello stesso dominio
+- __Persistenza__: localStorage sopravvive alla chiusura dei tab (fino a logout esplicito)
+- __Sicurezza__: Mantiene la sicurezza perché limitato al dominio
 
-Metodi modificati: pulisciStorage(), forceLogout()
+###### Risultato:
 
-Cambiato da: sessionStorage.removeItem()
-Cambiato a: localStorage.removeItem() per TOKEN e REFRESH_TOKEN
-
-#### 1.3 AuthenticationService - Modifica dei getter dei token
-Metodi modificati: get token(), get getRefreshToken()
-
-Cambiato da: sessionStorage.getItem()
-Cambiato a: localStorage.getItem()
-
-#### 1.4 AuthenticationService - Modifica dei metodi utente
-Metodi modificati: getUserLogged(), getUserLabels()
-
-Aggiunto:
-
-- Gestione degli errori con try-catch
-- Controlli per token null/undefined
-- Ritorno di valori sicuri (null, []) invece di crash
+Ora i token sono accessibili da qualsiasi tab dello stesso dominio.
 
 ---
 
+__METODO__ `pulisciStorage()`
 
-## 2: Miglioramento dell'AuthGuard
+###### Modifica Specifica:
 
-#### 2.1 Aggiunta di import per Observable
-
-File: auth.guard.ts
-
-Aggiunto:
 ```typescript
-import { Observable, of } from 'rxjs';
-import { map, catchError } from 'rxjs/operators';
+// PRIMA:
+sessionStorage.removeItem(SessionStorage.TOKEN);
+sessionStorage.removeItem(SessionStorage.REFRESH_TOKEN);
+
+// DOPO:
+localStorage.removeItem(SessionStorage.TOKEN);
+localStorage.removeItem(SessionStorage.REFRESH_TOKEN);
 ```
 
-#### 2.2 Miglioramento del metodo canActivate()
+###### Motivazione Tecnica:
 
-##### Funzionalità aggiunta:
+- __Consistenza__: Rimuove i token dallo stesso storage dove li salva
+- __Pulizia completa__: Assicura la rimozione completa dei dati di autenticazione
+- __Sicurezza__: Previene token orfani in storage diversi
 
-- Tentativo automatico di refresh del token prima di reindirizzare
-- Supporto per operazioni asincrone con Observable
-- Gestione degli errori del refresh token
+__METODO__ `forceLogout()`
 
-##### Logica implementata:
+###### Modifica Identica a pulisciStorage()
 
-1. Se c'è un token valido → Accesso consentito
-2. Se non c'è token ma c'è refresh token → Tenta refresh automatico
-3. Solo se anche il refresh fallisce → Reindirizza a
+###### Motivazione:
 
----
-
-
-## 3: Aggiornamento di Altri Componenti
-#### 3.1 AppComponent
-
-File: app.component.ts
-
-Modifiche:
-
-- ngOnInit(): Cambiato da sessionStorage a localStorage
-- Aggiunta gestione sicura per webSocketService.connect()
-
-#### 3.2 Utility Service
-
-File: utility.ts
-
-Modifiche:
-
-- cleanStorage(): Aggiornato per usare localStorage per i token
-
-#### 3.3 UsersButtonComponent
-
-File: users-button.component.ts
-
-Modifiche:
-
-- goToRbac(): Aggiornato per usare localStorage per i token
-
-#### 3.4 ConfigService
-
-File: config.service.ts
-
-Modifiche:
-
-- Aggiunto controllo token prima di caricare preferenze utente
-- Previene chiamate API quando l'utente non è autenticato
+Stesso principio di consistenza e pulizia completa.
 
 ---
 
+__GETTER__ `get token()` e `get getRefreshToken()`
 
-## 4: Risoluzione Errori Runtime
-
-#### 4.1 ProjectButtonComponent - Fix getUserById()
-
-File: project-button.component.ts
-
-Problema: Cannot read properties of undefined (reading 'username')
-
-Soluzione:
-```typescript
-// PRIMA (causava errore)
-return this.users.find((el) => el.user_id === user_id).username;
-
-// DOPO (gestione sicura)
-const user = this.users.find((el) => el.user_id === user_id);
-return user ? user.username : '';
-```
-
-#### 4.2 StatisticsService
-
-File: statistics.service.ts
-
-Aggiunto: Warning nel costruttore per utente non autenticato
-
----
-
-
-## 5: Risoluzione Errori delle Direttive di Permessi
-
-#### 5.1 PermissionDirective
-
-File: permission.directive.ts
-
-Problema: Cannot read properties of null (reading 'entity_perms')
-
-Soluzioni implementate:
-
-- Inizializzazione stabile: Token e utente inizializzati in ngOnInit
-- Gestione errori: Try-catch per decodifica token
-- Controlli null: Verifiche per token/utente/permessi
-- Migrazione storage: Da sessionStorage a localStorage
-
-#### 5.2 ExactPermissionDirective
-
-File: exact-permission.directive.ts
-
-Stesse modifiche della PermissionDirective per consistenza
-
----
-
-
-## 6: Risoluzione Errore ExpressionChangedAfterItHasBeenCheckedError
-
-#### 6.1 Problema:
-
-Angular rilevava cambiamenti nelle espressioni dopo il change detection
-
-#### 6.2 Soluzioni implementate:
-
-- Inizializzazione in ngOnInit: I valori vengono stabilizzati prima del rendering
-- setTimeout: La logica di visualizzazione viene posticipata al prossimo tick
-- Flag hasToken: Controllo stabile per evitare cambiamenti di stato
-
-Codice aggiunto alle direttive:
+###### Modifica Specifica:
 
 ```typescript
-ngOnInit(): void {
-    const token = localStorage.getItem(SessionStorage.TOKEN);
-    this.hasToken = !!token;
-    // ... inizializzazione utente
+// PRIMA:
+get token(): string | null {
+    return sessionStorage.getItem(SessionStorage.TOKEN);
 }
 
-ngAfterViewInit(): void {
-    setTimeout(() => {
-        this.checkPermissions(); // o updateView()
-    }, 0);
+// DOPO:
+get token(): string | null {
+    return localStorage.getItem(SessionStorage.TOKEN);
 }
 ```
 
+###### Motivazione Tecnica:
+
+- __Coerenza__: Deve leggere dallo stesso storage dove scrive
+- __Accessibilità__: Permette l'accesso ai token da qualsiasi tab
+- __Uniformità API__: Mantiene la stessa interfaccia pubblica
+
 ---
 
+__METODO__ `getUserLogged()` - __PRIMA VERSIONE__
 
-## Risultati
+###### Modifica Specifica:
 
-- Nuovo tab funzionante: URL copiabili e apribili in nuovi tab
-- Errore username undefined risolto
-- Token condivisi tra tab
-- Refresh automatico
-- Gestione errori
+```typescript
+// PRIMA:
+getUserLogged() {
+    const userLogged = this.appHelpers.decodeJwt(sessionStorage.getItem(SessionStorage.TOKEN)!);
+    return userLogged;
+}
+
+// DOPO:
+getUserLogged() {
+    try {
+        const token = localStorage.getItem(SessionStorage.TOKEN);
+        if (!token) {
+            return null;
+        }
+        const userLogged = this.appHelpers.decodeJwt(token);
+        return userLogged;
+    } catch (error) {
+        console.error('Errore nel decodificare il token utente:', error);
+        return null;
+    }
+}
+```
+
+###### Motivazione Tecnica:
+
+- __Token Null__: Gestisce il caso in cui il token non esista
+- __Gestione degli errori__: Cattura errori di decodifica JWT malformati
+- __Coerenza di archiviazione__: Usa localStorage invece di sessionStorage
+
+###### Benefici:
+
+- Previene crash dell'applicazione
+- Migliore debugging con log degli errori
+- Comportamento predicibile
+
+---
+
+__METODO__ `getUserLabels()` - __MIGLIORAMENTO__
+
+###### Modifica Specifica:
+
+```typescript
+// PRIMA:
+getUserLabels() {
+    const userLogged = this.appHelpers.decodeJwt(localStorage.getItem(SessionStorage.TOKEN)!);
+    const userEntityLabels = userLogged.labels;
+    const allEntityLabels = ALL_ENTITY_LABELS.filter((el) => el.visible);
+    return allEntityLabels.filter((el) => userEntityLabels.find((entEl: any) => entEl === el.label));
+}
+
+// DOPO:
+getUserLabels() {
+    try {
+        const token = localStorage.getItem(SessionStorage.TOKEN);
+        if (!token) {
+            return [];
+        }
+        const userLogged = this.appHelpers.decodeJwt(token);
+        if (!userLogged || !userLogged.labels) {
+            return [];
+        }
+        const userEntityLabels = userLogged.labels;
+        const allEntityLabels = ALL_ENTITY_LABELS.filter((el) => el.visible);
+        return allEntityLabels.filter((el) => userEntityLabels.find((entEl: any) => entEl === el.label));
+    } catch (error) {
+        console.error('Errore nel caricamento dei label utente:', error);
+        return [];
+    }
+}
+```
+
+###### Motivazione Tecnica:
+
+- __Valori predefiniti__: Ritorna array vuoto invece di undefined
+- __Controlli null annidati__: Verifica token, userLogged, e labels
+- __Tipo di ritorno coerente__: Sempre ritorna un array
+
+---
